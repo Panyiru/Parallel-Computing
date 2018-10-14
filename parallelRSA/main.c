@@ -59,6 +59,8 @@ int main(int argc, char** argv) {
                       fputc('\n', stream);
 
                       crackedKeys[crackedLen++] = i;
+                      MPI_Bcast(crackedKeys, 1, MPI_INT, rank, MPI_COMM_WORLD);
+                      MPI_Bcast(&crackedLen, 1, MPI_INT, rank, MPI_COMM_WORLD);
                    }
 
                   if (!crackedN2) {
@@ -70,6 +72,8 @@ int main(int argc, char** argv) {
                       fputc('\n', stream);
 
                       crackedKeys[crackedLen++] = j;
+                      MPI_Bcast(crackedKeys, 1, MPI_INT, rank, MPI_COMM_WORLD);
+                      MPI_Bcast(&crackedLen, 1, MPI_INT, rank, MPI_COMM_WORLD);
                   }
               }
             }
