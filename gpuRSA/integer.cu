@@ -4,6 +4,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+__device__ void gcd(volatile uint32_t *x, volatile uint32_t *y);
+__device__ void shiftR1(volatile uint32_t *x);
+__device__ void shiftL1(volatile uint32_t *x);
+__device__ int geq(volatile uint32_t *x, volatile uint32_t *y);
+__device__ void cuSubtract(volatile uint32_t *x, volatile uint32_t *y, volatile uint32_t *z);
+
 __global__ void cuda_crackKeys(const integer *keys, uint16_t *block_noCoprime, int gridRow, int gridCol, int gridDim, int keyNum) {
 
   // In each block, we use two shared arrays to record the key pairs
@@ -24,13 +30,18 @@ __global__ void cuda_crackKeys(const integer *keys, uint16_t *block_noCoprime, i
     gcd(keyOne[threadIdx.x][threadIdx.y], keyTwo[threadIdx.x][threadIdx.y]);
 
     if (threadIdx.x == 31) {
+      keyTwo[threadIdx.x][threadIdx.y][threadIdx.z] -= 1;
       // If gcd > 1, it means the pair is coPrime, and we need to record it.
-      if ((keyTwo[threadIdx.x][threadIdx.y][threadIdx.z]) > 1) {
-        int noCoprimeBlockId = blockIdx.y * gridDim.x + blockIdx.x;
+      if (__any(keyTwo[threadIdx.x][threadIdx.y][threadIdx.z])) {
+        int noCoprimeBlockId = blockIdx.y * grid_dim.x + blockIdx.x;
         block_noCoprime[noCoprimeBlockId] |= 1 << threadIdx.y * BLOCK_DIM + threadIdx.x;
       }
     }
   }
+}
+
+void callDevice(dim3 grid_dim, dim3 block_dim, integer* block_keys, uint16_t* block_noCoprime,int gridRow, int gridCol, int gridDim, int keyNum) {
+      cuda_crackKeys<<<grid_dim, block_dim>>>(block_keys, block_noCoprime, gridRow, gridCol, gridDim, keyNum);
 }
 
 /**
@@ -112,3 +123,5 @@ __device__ void cuSubtract(volatile uint32_t *x, volatile uint32_t *y, volatile 
 
   z[tid] = t;
 }
+
+

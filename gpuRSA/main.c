@@ -34,7 +34,7 @@ inline void retrieveKeys(const char *fileName, integer *keys, int num){
 
         for(int i = 0; i < num; i++){
             //read string from f in the base 10, and assign it to n.
-            mpz_inp_str(n, f, 10);
+            mpz_inp_str(n, file, 10);
             //export n to key[i]
             mpz_export(keys[i].ints, NULL, 1, sizeof(uint32_t), 0, 0, n);
         }
@@ -43,29 +43,32 @@ inline void retrieveKeys(const char *fileName, integer *keys, int num){
 
 }
 
+void crackPrivateKeys(integer* keys, uint16_t* noCoprime, int gridRow, int gridCol, FILE *stream);
+
 int main(int argc, char* argv[])
 {
     // When invoking the program, you need to type in the filename and keyNum
     if (argc < 3){
-        printf("The user needs to input the filename and number of keys in this file\n")
+        printf("The user needs to input the filename and number of keys in this file\n");
         return 0;
     }
-
+    //Read in the filename
+    const char* filename = argv[1];
     //Read in the number of keys in the file
     int keyNum = atoi(argv[2]);
 
     //Initialization
     integer *keys = (integer*) malloc(keyNum * sizeof(integer));
-    retrieveKeys(filename, *keys, keyNum);
+    retrieveKeys(filename, keys, keyNum);
 
     //Copy keys from host memory to device memory
     integer *block_keys;
-    cudaSafe(cudaMalloc((void **) block_keys, keyNum * sizeof(integer)));
-    cudaSafe(cudaMemcpy(*block_keys, *keys, keyNum * sizeof(integer), cudaMemcpyHostToDevice));
+    cudaSafe(cudaMalloc((void **) &block_keys, keyNum * sizeof(integer)));
+    cudaSafe(cudaMemcpy(block_keys, keys, keyNum * sizeof(integer), cudaMemcpyHostToDevice));
 
     uint16_t *noCoprime = (uint16_t*) malloc(BLOCKS_PER_GRID * BLOCKS_PER_GRID * sizeof(uint16_t));
     uint16_t *block_noCoprime;
-    cudaSafe(cudaMalloc((void **) block_noCoprime, BLOCKS_PER_GRID * BLOCKS_PER_GRID * sizeof(uint16_t)));
+    cudaSafe(cudaMalloc((void **) &block_noCoprime, BLOCKS_PER_GRID * BLOCKS_PER_GRID * sizeof(uint16_t)));
 
     FILE *file_outputstream = argc == 4 ? fopen(argv[3], "w") : stdout;
 
@@ -82,7 +85,7 @@ int main(int argc, char* argv[])
             //record the block which has a pair of keys which are not coprime.
             cudaSafe(cudaMemset(block_noCoprime, 0, BLOCKS_PER_GRID * BLOCKS_PER_GRID * sizeof(uint16_t)));
 
-            cuda_crackKeys<<<grid_dim, block_dim>>>(block_keys, block_noCoprime, i, j, GRID_DIM, keyNum);
+            callDevice(grid_dim, block_dim, block_keys, block_noCoprime, i, j, GRID_DIM, keyNum);
 
             cudaSafe(cudaPeekAtLastError());
             cudaSafe(cudaDeviceSynchronize());
@@ -109,7 +112,7 @@ int main(int argc, char* argv[])
 
 inline bool checkIfCrackedAlready(int n) {
   for (int i = 0; i < crackedLen; i++) {
-    if (n == crackedKey[i])
+    if (n == crackedKeys[i])
       return true;
   }
 
@@ -117,15 +120,15 @@ inline bool checkIfCrackedAlready(int n) {
 }
 
 void crackPrivateKeys(integer* keys, uint16_t* noCoprime, int gridRow, int gridCol, FILE *stream) {
-  for (int i = 0; i < BLKS_PER_TILE; i++) {
-    for (int j = 0; j < BLKS_PER_TILE; j++) {
-      uint16_t noCoprimeBlock = noCoprime[i * BLKS_PER_TILE + j];
+  for (int i = 0; i < BLOCKS_PER_GRID; i++) {
+    for (int j = 0; j < BLOCKS_PER_GRID; j++) {
+      uint16_t noCoprimeBlock = noCoprime[i * BLOCKS_PER_GRID + j];
 
       if (noCoprimeBlock) {
         for (int y = 0; y < BLOCK_DIM; y++) {
           if (noCoprimeBlock & Y_MASKS[y]) {
             for (int x = 0; x < BLOCK_DIM; x++) {
-              if (notCoprimeBlock & Y_MASKS[y] & X_MASKS[x]) {
+              if (noCoprimeBlock & Y_MASKS[y] & X_MASKS[x]) {
                 int n1Ndx = gridRow * GRID_DIM + i * BLOCK_DIM + y;
                 int n2Ndx = gridCol * GRID_DIM + j * BLOCK_DIM + x;
                 bool crackedN1 = checkIfCrackedAlready(n1Ndx);

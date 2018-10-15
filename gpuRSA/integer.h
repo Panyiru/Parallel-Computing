@@ -9,4 +9,6 @@
 
 typedef struct integer { uint32_t ints[N]; } integer;
 
+void callDevice(dim3 grid_dim, dim3 block_dim, integer* block_keys, uint16_t* block_noCoprime,int gridRow, int gridCol, int gridDim, int keyNum);
+
 #endif  // INTEGER_H_
