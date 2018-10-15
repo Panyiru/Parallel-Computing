@@ -10,7 +10,7 @@ __device__ void shiftL1(volatile uint32_t *x);
 __device__ int geq(volatile uint32_t *x, volatile uint32_t *y);
 __device__ void cuSubtract(volatile uint32_t *x, volatile uint32_t *y, volatile uint32_t *z);
 
-__global__ void cuda_crackKeys(const integer *keys, uint16_t *block_noCoprime, int gridRow, int gridCol, int gridDim, int keyNum) {
+__global__ void cuda_crackKeys(dim3 grid_dim, const integer *keys, uint16_t *block_noCoprime, int gridRow, int gridCol, int gridDim, int keyNum) {
 
   // In each block, we use two shared arrays to record the key pairs
   __shared__ volatile uint32_t keyOne[BLOCK_DIM][BLOCK_DIM][32];
@@ -40,8 +40,8 @@ __global__ void cuda_crackKeys(const integer *keys, uint16_t *block_noCoprime, i
   }
 }
 
-void callDevice(dim3 grid_dim, dim3 block_dim, integer* block_keys, uint16_t* block_noCoprime,int gridRow, int gridCol, int gridDim, int keyNum) {
-      cuda_crackKeys<<<grid_dim, block_dim>>>(block_keys, block_noCoprime, gridRow, gridCol, gridDim, keyNum);
+void cudaWrapper(dim3 grid_dim, dim3 block_dim, integer* block_keys, uint16_t* block_noCoprime,int gridRow, int gridCol, int gridDim, int keyNum) {
+      cuda_crackKeys<<<grid_dim, block_dim>>>(grid_dim, block_keys, block_noCoprime, gridRow, gridCol, gridDim, keyNum);
 }
 
 /**
