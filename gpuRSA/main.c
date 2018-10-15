@@ -76,8 +76,8 @@ int main(int argc, char* argv[])
     mpz_inits(n1, n2, p, q1, q2, d1, d2, NULL);
 
     //create grids and blocks.
-    dim3 grid_dim(GRID_DIM / BLOCK_DIM, GRID_DIM / BLOCK_DIM);
-    dim3 block_dim(BLOCK_DIM, BLOCK_DIM, WARP_DIM);
+    dim3 gridDim(GRID_DIM / BLOCK_DIM, GRID_DIM / BLOCK_DIM);
+    dim3 blockDim(WARP_DIM, BLOCK_DIM, BLOCK_DIM);
     int numOfGrids = NUM_GRIDS(keyNum);
 
     for(int i=0; i<numOfGrids; i++){
@@ -85,7 +85,7 @@ int main(int argc, char* argv[])
             //record the block which has a pair of keys which are not coprime.
             cudaSafe(cudaMemset(block_noCoprime, 0, BLOCKS_PER_GRID * BLOCKS_PER_GRID * sizeof(uint16_t)));
 
-            cudaWrapper(grid_dim, block_dim, block_keys, block_noCoprime, i, j, GRID_DIM, keyNum);
+            cudaWrapper(gridDim, blockDim, block_keys, block_noCoprime, i, j, GRID_DIM, keyNum);
 
             cudaSafe(cudaPeekAtLastError());
             cudaSafe(cudaDeviceSynchronize());

@@ -10,45 +10,38 @@ __device__ void shiftL1(volatile uint32_t *x);
 __device__ int geq(volatile uint32_t *x, volatile uint32_t *y);
 __device__ void cuSubtract(volatile uint32_t *x, volatile uint32_t *y, volatile uint32_t *z);
 
-__global__ void cuda_crackKeys(dim3 grid_dim, const integer *keys, uint16_t *block_noCoprime, int gridRow, int gridCol, int gridDim, int keyNum) {
+__global__ void cuda_crackKeys(const integer *keys, uint16_t *noCoprime, int gridRow, int gridCol, int grid_Dim, int keyNum) {
 
-  // In each block, we use two shared arrays to record the key pairs
   __shared__ volatile uint32_t keyOne[BLOCK_DIM][BLOCK_DIM][32];
   __shared__ volatile uint32_t keyTwo[BLOCK_DIM][BLOCK_DIM][32];
 
-  // This will generate two keys for this block to compare.
-  int keyX = gridCol * gridDim + blockIdx.x * BLOCK_DIM + threadIdx.x;
-  int keyY = gridRow * gridDim + blockIdx.y * BLOCK_DIM + threadIdx.y;
+  int keyX = gridCol * grid_Dim + blockIdx.x * BLOCK_DIM + threadIdx.y;
+  int keyY = gridRow * grid_Dim + blockIdx.y * BLOCK_DIM + threadIdx.z;
 
-  //We only need to compare each pair of key for one time
   if (keyX < keyNum && keyY < keyNum && keyX > keyY) {
-    //Each thread will load its corresponding chunk
-    keyOne[threadIdx.x][threadIdx.y][threadIdx.z] = keys[keyX].ints[threadIdx.z];
-    keyTwo[threadIdx.x][threadIdx.y][threadIdx.z] = keys[keyY].ints[threadIdx.z];
 
-    //Calculate gcd for each pair of keys
-    gcd(keyOne[threadIdx.x][threadIdx.y], keyTwo[threadIdx.x][threadIdx.y]);
+    keyOne[threadIdx.y][threadIdx.z][threadIdx.x] = keys[keyX].ints[threadIdx.x];
+    keyTwo[threadIdx.y][threadIdx.z][threadIdx.x] = keys[keyY].ints[threadIdx.x];
+    // calculate gcd
+    gcd(keyOne[threadIdx.y][threadIdx.z], keyTwo[threadIdx.y][threadIdx.z]);
 
     if (threadIdx.x == 31) {
-      keyTwo[threadIdx.x][threadIdx.y][threadIdx.z] -= 1;
-      // If gcd > 1, it means the pair is coPrime, and we need to record it.
-      if (__any(keyTwo[threadIdx.x][threadIdx.y][threadIdx.z])) {
-        int noCoprimeBlockId = blockIdx.y * grid_dim.x + blockIdx.x;
-        block_noCoprime[noCoprimeBlockId] |= 1 << threadIdx.y * BLOCK_DIM + threadIdx.x;
+      keyTwo[threadIdx.y][threadIdx.z][threadIdx.x] -= 1;
+      // If gcd >1, it means they are coPrime
+      if (__any(keyTwo[threadIdx.y][threadIdx.z][threadIdx.x])) {
+        int notCoprimeBlockNdx = blockIdx.y * gridDim.x + blockIdx.x;
+        noCoprime[notCoprimeBlockNdx] |= 1 << threadIdx.z * BLOCK_DIM + threadIdx.y;
       }
     }
   }
 }
 
-void cudaWrapper(dim3 grid_dim, dim3 block_dim, integer* block_keys, uint16_t* block_noCoprime,int gridRow, int gridCol, int gridDim, int keyNum) {
-      cuda_crackKeys<<<grid_dim, block_dim>>>(grid_dim, block_keys, block_noCoprime, gridRow, gridCol, gridDim, keyNum);
+void cudaWrapper(dim3 gridDim, dim3 blockDim, integer* block_keys, uint16_t* block_noCoprime,int gridRow, int gridCol, int grid_dim, int keyNum) {
+      cuda_crackKeys<<<gridDim, blockDim>>>(block_keys, block_noCoprime, gridRow, gridCol, grid_dim, keyNum);
 }
 
-/**
- * Binary GCD algo
- */
 __device__ void gcd(volatile uint32_t *x, volatile uint32_t *y) {
-  int tid = threadIdx.z;
+  int tid = threadIdx.x;
 
   while (__any(x[tid])) {
     while ((x[31] & 1) == 0)
@@ -69,13 +62,13 @@ __device__ void gcd(volatile uint32_t *x, volatile uint32_t *y) {
 }
 
 __device__ void shiftR1(volatile uint32_t *x) {
-  int tid = threadIdx.z;
+  int tid = threadIdx.x;
   uint32_t prevX = tid ? x[tid-1] : 0;
   x[tid] = (x[tid] >> 1) | (prevX << 31);
 }
 
 __device__ void shiftL1(volatile uint32_t *x) {
-  int tid = threadIdx.z;
+  int tid = threadIdx.x;
   uint32_t nextX = tid != 31 ? x[tid+1] : 0;
   x[tid] = (x[tid] << 1) | (nextX >> 31);
 }
@@ -83,22 +76,22 @@ __device__ void shiftL1(volatile uint32_t *x) {
 __device__ int geq(volatile uint32_t *x, volatile uint32_t *y) {
   /* shared memory to hold the position at which the int of x >= int of y */
   __shared__ unsigned int pos[BLOCK_DIM][BLOCK_DIM];
-  int tid = threadIdx.z;
+  int tid = threadIdx.x;
 
   if (tid == 0)
-    pos[threadIdx.x][threadIdx.y] = 31;
+    pos[threadIdx.y][threadIdx.z] = 31;
 
   if (x[tid] != y[tid])
-    atomicMin(&pos[threadIdx.x][threadIdx.y], tid);
+    atomicMin(&pos[threadIdx.y][threadIdx.z], tid);
 
-  return x[pos[threadIdx.x][threadIdx.y]] >= y[pos[threadIdx.x][threadIdx.y]];
+  return x[pos[threadIdx.y][threadIdx.z]] >= y[pos[threadIdx.y][threadIdx.z]];
 }
 
 __device__ void cuSubtract(volatile uint32_t *x, volatile uint32_t *y, volatile uint32_t *z) {
   /* shared memory to hold underflow flags */
   __shared__ unsigned char s_borrow[BLOCK_DIM][BLOCK_DIM][32];
-  unsigned char *borrow = s_borrow[threadIdx.x][threadIdx.y];
-  int tid = threadIdx.z;
+  unsigned char *borrow = s_borrow[threadIdx.y][threadIdx.z];
+  int tid = threadIdx.x;
 
   /* set LSB's borrow to 0 */
   if (tid == 0)
@@ -123,5 +116,3 @@ __device__ void cuSubtract(volatile uint32_t *x, volatile uint32_t *y, volatile 
 
   z[tid] = t;
 }
-
-
