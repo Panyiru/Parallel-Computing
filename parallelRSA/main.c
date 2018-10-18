@@ -30,7 +30,8 @@ int main(int argc, char** argv) {
 	MPI_Comm_size(MPI_COMM_WORLD, &size);
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-
+    mpz_t gcd, q1, q2, d1, d2;
+    mpz_inits(gcd, q1, q2, d1, d2, NULL);
 
     int keyNum = atoi(argv[2]);
     mpz_t* keys = mpz_reads(argv[1], keyNum);
@@ -39,11 +40,6 @@ int main(int argc, char** argv) {
 
     int *crackedKeys = malloc(keyNum * sizeof(int));;
     int crackedLen = 0;
-
-    mpz_t gcd, q1, q2, d1, d2;
-    mpz_inits(gcd, q1, q2, d1, d2, NULL);
-
-    MPI_Barrier(MPI_COMM_WORLD);
 
     int i,j;
     #pragma omp parallel for schedule(dynamic)
@@ -62,10 +58,7 @@ int main(int argc, char** argv) {
                       fputc(':', stream);
                       mpz_out_str(stream, 10, d1);
                       fputc('\n', stream);
-
                       crackedKeys[crackedLen++] = i;
-                      MPI_Bcast(crackedKeys, keyNum, MPI_INT, rank, MPI_COMM_WORLD);
-                      MPI_Bcast(&crackedLen, 1, MPI_INT, rank, MPI_COMM_WORLD);
                    }
 
                   if (!crackedN2) {
@@ -75,10 +68,7 @@ int main(int argc, char** argv) {
                       fputc(':', stream);
                       mpz_out_str(stream, 10, d2);
                       fputc('\n', stream);
-
                       crackedKeys[crackedLen++] = j;
-                      MPI_Bcast(crackedKeys, keyNum, MPI_INT, rank, MPI_COMM_WORLD);
-                      MPI_Bcast(&crackedLen, 1, MPI_INT, rank, MPI_COMM_WORLD);
                   }
               }
             }
@@ -101,10 +91,7 @@ int main(int argc, char** argv) {
                       fputc(':', stream);
                       mpz_out_str(stream, 10, d1);
                       fputc('\n', stream);
-
                       crackedKeys[crackedLen++] = i;
-                      MPI_Bcast(crackedKeys, keyNum, MPI_INT, rank, MPI_COMM_WORLD);
-                      MPI_Bcast(&crackedLen, 1, MPI_INT, rank, MPI_COMM_WORLD);
 
                    }
 
@@ -115,20 +102,16 @@ int main(int argc, char** argv) {
                       fputc(':', stream);
                       mpz_out_str(stream, 10, d2);
                       fputc('\n', stream);
-
                       crackedKeys[crackedLen++] = j;
-                      MPI_Bcast(crackedKeys, keyNum, MPI_INT, rank, MPI_COMM_WORLD);
-                      MPI_Bcast(&crackedLen, 1, MPI_INT, rank, MPI_COMM_WORLD);
-
                   }
               }
             }
          }
       }
-    MPI_Barrier(MPI_COMM_WORLD);
 
     free(keys);
     free(crackedKeys);
+    printf("%d\n", crackedLen);
 
     if (argc == 4)
         fclose(stream);
